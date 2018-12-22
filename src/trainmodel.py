@@ -9,7 +9,7 @@ import librosa
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-
+import json
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Flatten
 from keras.layers.convolutional import MaxPooling2D, Conv2D
@@ -24,15 +24,25 @@ COL_SIZE = 30
 EPOCHS = 10#35#250
 
 def to_categorical(y):
+    # print(y)
     '''
     Converts list of languages into a binary class matrix
     :param y (list): list of languages
     :return (numpy array): binary class matrix
     '''
     lang_dict = {}
+    a=[]
     for index,language in enumerate(set(y)):
         lang_dict[language] = index
-    y = map(lambda x: lang_dict[x],y)
+    # print (lang_dict)
+    y = list(map(lambda x: lang_dict[x],y))
+    # a = np.fromiter(y, dtype=np.int)
+    # z = y
+    # print(len(y))
+    # for i in list(y):
+    #     a.append(i)
+    #     print (i)
+    # print (a )
     return utils.to_categorical(y, len(lang_dict))
 
 def get_wav(language_num):
@@ -88,7 +98,7 @@ def make_segments(mfccs,labels):
     segments = []
     seg_labels = []
     for mfcc,label in zip(mfccs,labels):
-        for start in range(0, mfcc.shape[1] / COL_SIZE):
+        for start in range(0, int(mfcc.shape[1] / COL_SIZE)):
             segments.append(mfcc[:, start * COL_SIZE:(start + 1) * COL_SIZE])
             seg_labels.append(label)
     return(segments, seg_labels)
@@ -100,7 +110,7 @@ def segment_one(mfcc):
     :return (numpy array): Segmented MFCC array
     '''
     segments = []
-    for start in xrange(0, mfcc.shape[1] / COL_SIZE):
+    for start in range(0, int(mfcc.shape[1] / COL_SIZE)):
         segments.append(mfcc[:, start * COL_SIZE:(start + 1) * COL_SIZE])
     return(np.array(segments))
 
@@ -210,7 +220,7 @@ if __name__ == '__main__':
     # Get statistics
     train_count = Counter(y_train)
     test_count =  Counter(y_test)
-    acc_to_beat = test_count.most_common(1)[0][1] / float(np.sum(test_count.values()))
+    # acc_to_beat = test_count.most_common(1)[0][1] / float(np.sum(test_count.values()))
 
     # To categorical
     y_train = to_categorical(y_train)
@@ -243,12 +253,12 @@ if __name__ == '__main__':
     y_predicted = accuracy.predict_class_all(create_segmented_mfccs(X_test), model)
 
     # Print statistics
-    print train_count
-    print test_count
-    print acc_to_beat
-    print np.sum(accuracy.confusion_matrix(y_predicted, y_test),axis=1)
-    print accuracy.confusion_matrix(y_predicted, y_test)
-    print accuracy.get_accuracy(y_predicted,y_test)
+    print (train_count)
+    print (test_count)
+    # print (acc_to_beat)
+    print (np.sum(accuracy.confusion_matrix(y_predicted, y_test),axis=1))
+    print (accuracy.confusion_matrix(y_predicted, y_test))
+    print (accuracy.get_accuracy(y_predicted,y_test))
 
     # Save model
     save_model(model, model_filename)

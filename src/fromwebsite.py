@@ -41,6 +41,7 @@ def parse_p(p_tag):
     :return (str): string of link
     '''
     text = p_tag.text.replace(' ','').split(',')
+    # print (text)
     return([ROOT_URL+p_tag.a['href'], text[0], text[1]])
 
 def get_bio(hrefs):
@@ -89,16 +90,17 @@ def create_dataframe(languages):
 
     for bs in bss:
         for p in bs.find_all('p'):
+            # print(p)
             if p.a:
+                # print(parse_p(p))
                 persons.append(parse_p(p))
 
     df = pd.DataFrame(persons, columns=['href','language_num','sex'])
 
     bio_rows = get_bio(df['href'])
-
     if DEBUG:
         print('loading finished')
-
+    print(bio_rows.iloc[:,0])
     df['birth_place'] = bio_rows.iloc[:,0]
     df['native_language'] = bio_rows.iloc[:,1]
     df['other_languages'] = bio_rows.iloc[:,2]

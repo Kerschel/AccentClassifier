@@ -12,13 +12,12 @@ def filter_df(df):
     :param df (DataFrame): Full unfiltered DataFrame
     :return (DataFrame): Filtered DataFrame
     '''
-
     # Example to filter arabic, mandarin, and english and limit to 73 audio files
-    arabic = df[df['native_language'] == 'arabic']
-    mandarin = df[df['native_language'] == 'mandarin']
+    arabic = df[df['native_language'] == 'arabic'][:73]
+    mandarin = df[df['native_language'] == 'mandarin'][:73]
     english = df[df.native_language == 'english'][:73]
-    mandarin = mandarin[mandarin.length_of_english_residence < 10][:73]
-    arabic = arabic[arabic.length_of_english_residence < 10][:73]
+    # mandarin = mandarin[mandarin.length_of_english_residence < 10][:73]
+    # arabic = arabic[arabic.length_of_english_residence < 10][:73]
 
     df = english.append(arabic)
     df = df.append(mandarin)
@@ -43,4 +42,4 @@ if __name__ == '__main__':
     csv_file = sys.argv[1]
     df = pd.read_csv(csv_file)
     filtered_df = filter_df(df)
-    print split_people(filtered_df)
+    print (split_people(filtered_df))
