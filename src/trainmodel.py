@@ -1,130 +1,27 @@
+import helpers as k
 import pandas as pd
 from collections import Counter
 import sys
 import getsplit
+
 from keras import utils
 import accuracy
 import multiprocessing
 import librosa
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-import json
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Flatten
 from keras.layers.convolutional import MaxPooling2D, Conv2D
 from keras.preprocessing.image import ImageDataGenerator
 from keras.callbacks import EarlyStopping, TensorBoard
-
+from keras.models import load_model
 DEBUG = True
 SILENCE_THRESHOLD = .01
 RATE = 24000
 N_MFCC = 13
 COL_SIZE = 30
-EPOCHS = 10#35#250
-
-def to_categorical(y):
-    # print(y)
-    '''
-    Converts list of languages into a binary class matrix
-    :param y (list): list of languages
-    :return (numpy array): binary class matrix
-    '''
-    lang_dict = {}
-    a=[]
-    for index,language in enumerate(set(y)):
-        lang_dict[language] = index
-    # print (lang_dict)
-    y = list(map(lambda x: lang_dict[x],y))
-    # a = np.fromiter(y, dtype=np.int)
-    # z = y
-    # print(len(y))
-    # for i in list(y):
-    #     a.append(i)
-    #     print (i)
-    # print (a )
-    return utils.to_categorical(y, len(lang_dict))
-
-def get_wav(language_num):
-    '''
-    Load wav file from disk and down-samples to RATE
-    :param language_num (list): list of file names
-    :return (numpy array): Down-sampled wav file
-    '''
-    y, sr = librosa.load('../audio/{}.wav'.format(language_num))
-    return(librosa.core.resample(y=y,orig_sr=sr,target_sr=RATE, scale=True))
-
-def to_mfcc(wav):
-    '''
-    Converts wav file to Mel Frequency Ceptral Coefficients
-    :param wav (numpy array): Wav form
-    :return (2d numpy array: MFCC
-    '''
-    return(librosa.feature.mfcc(y=wav, sr=RATE, n_mfcc=N_MFCC))
-
-def remove_silence(wav, thresh=0.04, chunk=5000):
-    '''
-    Searches wav form for segments of silence. If wav form values are lower than 'thresh' for 'chunk' samples, the values will be removed
-    :param wav (np array): Wav array to be filtered
-    :return (np array): Wav array with silence removed
-    '''
-
-    tf_list = []
-    for x in range(len(wav) / chunk):
-        if (np.any(wav[chunk * x:chunk * (x + 1)] >= thresh) or np.any(wav[chunk * x:chunk * (x + 1)] <= -thresh)):
-            tf_list.extend([True] * chunk)
-        else:
-            tf_list.extend([False] * chunk)
-
-    tf_list.extend((len(wav) - len(tf_list)) * [False])
-    return(wav[tf_list])
-
-def normalize_mfcc(mfcc):
-    '''
-    Normalize mfcc
-    :param mfcc:
-    :return:
-    '''
-    mms = MinMaxScaler()
-    return(mms.fit_transform(np.abs(mfcc)))
-
-def make_segments(mfccs,labels):
-    '''
-    Makes segments of mfccs and attaches them to the labels
-    :param mfccs: list of mfccs
-    :param labels: list of labels
-    :return (tuple): Segments with labels
-    '''
-    segments = []
-    seg_labels = []
-    for mfcc,label in zip(mfccs,labels):
-        for start in range(0, int(mfcc.shape[1] / COL_SIZE)):
-            segments.append(mfcc[:, start * COL_SIZE:(start + 1) * COL_SIZE])
-            seg_labels.append(label)
-    return(segments, seg_labels)
-
-def segment_one(mfcc):
-    '''
-    Creates segments from on mfcc image. If last segments is not long enough to be length of columns divided by COL_SIZE
-    :param mfcc (numpy array): MFCC array
-    :return (numpy array): Segmented MFCC array
-    '''
-    segments = []
-    for start in range(0, int(mfcc.shape[1] / COL_SIZE)):
-        segments.append(mfcc[:, start * COL_SIZE:(start + 1) * COL_SIZE])
-    return(np.array(segments))
-
-def create_segmented_mfccs(X_train):
-    '''
-    Creates segmented MFCCs from X_train
-    :param X_train: list of MFCCs
-    :return: segmented mfccs
-    '''
-    segmented_mfccs = []
-    for mfcc in X_train:
-        segmented_mfccs.append(segment_one(mfcc))
-    return(segmented_mfccs)
-
+EPOCHS = 10 #35#250
 
 def train_model(X_train,y_train,X_validation,y_validation, batch_size=128): #64
     '''
@@ -147,8 +44,8 @@ def train_model(X_train,y_train,X_validation,y_validation, batch_size=128): #64
     X_validation = X_validation.reshape(X_validation.shape[0],val_rows,val_cols,1)
 
 
-    print('x_train shape:', X_train.shape)
-    print(X_train.shape[0], 'train samples')
+    print('X_train shape:', X_train.shape)
+    print(X_train.shape[0], 'training samples')
 
     model = Sequential()
 
@@ -167,7 +64,7 @@ def train_model(X_train,y_train,X_validation,y_validation, batch_size=128): #64
 
     model.add(Dense(num_classes, activation='softmax'))
     model.compile(loss='categorical_crossentropy',
-                  optimizer='adadelta',
+                  optimizer='adam',
                   metrics=['accuracy'])
 
     # Stops training if accuracy does not change at least 0.005 over 10 epochs
@@ -186,6 +83,7 @@ def train_model(X_train,y_train,X_validation,y_validation, batch_size=128): #64
                         steps_per_epoch=len(X_train) / 32
                         , epochs=EPOCHS,
                         callbacks=[es,tb], validation_data=(X_validation,y_validation))
+    # model.fit(X_train,y_train,batch_size=batch_size,epochs=EPOCHS)
 
     return (model)
 
@@ -196,69 +94,103 @@ def save_model(model, model_filename):
     :param model_filename: Filename
     :return: None
     '''
-    model.save('../models/{}.h5'.format(model_filename))  # creates a HDF5 file 'my_model.h5'
+    model.save('{}.h5'.format(model_filename))  # creates a HDF5 file 'my_model.h5'
+
+
+
+############################################################
+
+
+
+
+#######################################
 
 if __name__ == '__main__':
     '''
         Console command example:
         python trainmodel.py bio_metadata.csv model50
         '''
-
+    results=[]
+    acc = []
+    
     # Load arguments
     file_name = sys.argv[1]
     model_filename = sys.argv[2]
 
     # Load metadata
-    df = pd.read_csv(file_name)
-
+    df = k.pd.read_csv(file_name,encoding='ISO-8859-1')
     # Filter metadata to retrieve only files desired
     filtered_df = getsplit.filter_df(df)
 
-    # Train test split
-    X_train, X_test, y_train, y_test = getsplit.split_people(filtered_df)
+    for i in range (0,1):
+        # Train test split
+        X_train, X_test, y_train, y_test = k.getsplit.split_people(filtered_df)
+        # Get statistics
+        # print (y_train)
+        train_count = k.Counter(y_train)
+        test_count = k.Counter(y_test)
 
-    # Get statistics
-    train_count = Counter(y_train)
-    test_count =  Counter(y_test)
-    # acc_to_beat = test_count.most_common(1)[0][1] / float(np.sum(test_count.values()))
+        print("Entering main")
 
-    # To categorical
-    y_train = to_categorical(y_train)
-    y_test = to_categorical(y_test)
+        # import ipdb
+        # ipdb.set_trace()
 
-    # Get resampled wav files using multiprocessing
-    if DEBUG:
-        print('loading wav files')
-    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
-    X_train = pool.map(get_wav, X_train)
-    X_test = pool.map(get_wav, X_test)
 
-    # Convert to MFCC
-    if DEBUG:
-        print('converting to mfcc')
-    X_train = pool.map(to_mfcc, X_train)
-    X_test = pool.map(to_mfcc, X_test)
+        acc_to_beat = test_count.most_common(1)[0][1] / float(np.sum(list(test_count.values())))
 
-    # Create segments from MFCCs
-    X_train, y_train = make_segments(X_train, y_train)
-    X_validation, y_validation = make_segments(X_test, y_test)
+        # To categorical
+        y_train = k.to_categorical(y_train)
+        # print (y_train)
+        
+        y_test = k.to_categorical(y_test)
 
-    # Randomize training segments
-    X_train, _, y_train, _ = train_test_split(X_train, y_train, test_size=0)
+        # Get resampled wav files using multiprocessing
+        if DEBUG:
+            print('Loading wav files....')
+        pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+        X_train = pool.map(k.get_wav, X_train)
+        X_test = pool.map(k.get_wav, X_test)
 
-    # Train model
-    model = train_model(np.array(X_train), np.array(y_train), np.array(X_validation),np.array(y_validation))
+        # Convert to MFCC
+        if DEBUG:
+            print('Converting to MFCC....')
+        X_train = pool.map(k.to_mfcc, X_train)
+        X_test = pool.map(k.to_mfcc, X_test)
 
-    # Make predictions on full X_test MFCCs
-    y_predicted = accuracy.predict_class_all(create_segmented_mfccs(X_test), model)
+        # Create segments from MFCCs
+        X_train, y_train = k.make_segments(X_train, y_train)
+        X_validation, y_validation = k.make_segments(X_test, y_test)
 
-    # Print statistics
-    print (train_count)
-    print (test_count)
-    # print (acc_to_beat)
-    print (np.sum(accuracy.confusion_matrix(y_predicted, y_test),axis=1))
-    print (accuracy.confusion_matrix(y_predicted, y_test))
-    print (accuracy.get_accuracy(y_predicted,y_test))
+        # trainer = (np.array(X_train) / np.amax(X_train)).astype(np.float32)
 
-    # Save model
+        # Randomize training segments
+        X_train, _, y_train, _ = train_test_split(X_train, y_train, test_size=0)
+        # print (np.array(X_train))
+        # print ("MAX IS HERE ", np.amax(np.array(X_train)))
+        # print (trainer)
+
+        # Train model
+        model = train_model(np.array(X_train), np.array(y_train), np.array(X_validation),np.array(y_validation))
+        # model = load_model("model.h5")
+        # predicted = model.predict (k.create_segmented_mfccs(X_test))
+        # for i in predicted:
+        #     print (i)
+        # Make predictions on full X_test MFCCs
+        y_predicted = accuracy.predict_class_all(k.create_segmented_mfccs(X_test), model)
+        # print (y_predicted)
+        # for i in y_predicted:
+        #     print (i)
+        # Print statistics
+        print('Training samples:', train_count)
+        print('Testing samples:', test_count)
+        print('Accuracy to beat:', acc_to_beat)
+        print('Confusion matrix of total samples:\n', np.sum(accuracy.confusion_matrix(y_predicted, y_test),axis=1))
+        print('Confusion matrix:\n',accuracy.confusion_matrix(y_predicted, y_test))
+        print('Accuracy:', accuracy.get_accuracy(y_predicted,y_test))
+
+        results.append(accuracy.confusion_matrix(y_predicted, y_test))
+        acc.append(accuracy.get_accuracy(y_predicted,y_test))
+        # Save model
+    print (results)
+    print (acc)
     save_model(model, model_filename)
